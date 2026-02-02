@@ -15,15 +15,14 @@ for ver in 8.4 8.3 8.2 8.1 8.0 7.4 7.3 7.2; do \
 done && \
 \
 # 3. Find every WordPress App and activate the Redis Plugin via WP-CLI
-echo "Searching for WordPress apps to enable Redis..." && \
-for app_dir in /srv/users/*/apps/*/public; do \
-    if [ -f "$app_dir/wp-config.php" ]; then \
-        echo "Installing Redis Plugin in $app_dir..." && \
-        # Determine the system user who owns the app to run wp-cli safely
-        app_user=$(stat -c '%U' "$app_dir") && \
-        sudo -u "$app_user" -i -- wp --path="$app_dir" plugin install redis-cache --activate && \
-        sudo -u "$app_user" -i -- wp --path="$app_dir" redis enable && \
-        echo "Redis enabled for $(basename $(dirname "$app_dir"))."; \
-    fi \
+echo "Searching for WordPress apps to enable Redis..."
+for app_dir in /srv/users/serverpilot/apps/*/public; do
+    if [ -f "$app_dir/wp-config.php" ]; then
+        echo "Installing Redis Plugin in $app_dir..."
+        # We know the user is 'serverpilot', so we call it directly
+        sudo -u serverpilot -i -- wp --path="$app_dir" plugin install redis-cache --activate
+        sudo -u serverpilot -i -- wp --path="$app_dir" redis enable
+        echo "Redis enabled for $(basename $(dirname "$app_dir"))."
+    fi
 done && \
 echo "SUCCESS: Server, Extensions, and all WP Apps are now using Redis."
