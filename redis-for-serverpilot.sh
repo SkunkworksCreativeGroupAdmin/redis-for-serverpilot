@@ -23,14 +23,16 @@ for app_dir in /srv/users/serverpilot/apps/*/public; do
         # Define exclusions to prevent MainWP/Gravity Forms lag
         REDIS_EXCLUDES="define( 'WP_REDIS_IGNORED_GROUPS', [ 'transient', 'site-transient', 'wp_cron', 'counts', 'wordfence', 'action_scheduler', 'query_monitor', 'itsec', 'itsec_lockout', 'session', 'wc_session_queries', 'wp_cache_keys', 'plugins' ] );"
         
-        if ! grep -q "WP_REDIS_IGNORED_GROUPS" "$app_dir/wp-config.php"; then
-            # Inject the constant above the happy blogging line
-            sed -i "/\/\* That's all, stop editing! Happy blogging. \*\//i $REDIS_EXCLUDES" "$app_dir/wp-config.php"
-            
-            # CRITICAL: Revert ownership back to serverpilot so the site stays live
-            chown serverpilot:serverpilot "$app_dir/wp-config.php"
-            echo "Added group exclusions to wp-config.php."
-        fi
+        # CLEANUP: Remove any existing exclusion line so we don't get duplicates
+        # This allows you to update the list and re-run the script safely.
+        sed -i "/WP_REDIS_IGNORED_GROUPS/d" "$app_dir/wp-config.php"
+
+        # Inject the new constant above the happy blogging line
+        sed -i "/\/\* That's all, stop editing! Happy blogging. \*\//i $REDIS_EXCLUDES" "$app_dir/wp-config.php"
+        
+        # Ensure ownership is correct
+        chown serverpilot:serverpilot "$app_dir/wp-config.php"
+        echo "Applied latest Redis group exclusions to wp-config.php."
 
         # Check if plugin is already installed to save time and API pings
         # Running as serverpilot ensures WP-CLI creates files with the right owner
