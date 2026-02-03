@@ -25,4 +25,12 @@ for app_dir in /srv/users/serverpilot/apps/*/public; do
         echo "Redis enabled for $(basename $(dirname "$app_dir"))."
     fi
 done && \
+\
+# 4. System-Wide Flush
+# Clears stale cron locks or nonces so changes take effect immediately
+if command -v redis-cli > /dev/null; then
+    echo "Flushing Redis cache for all applications..."
+    redis-cli flushall
+fi && \
+\
 echo "SUCCESS: Server, Extensions, and all WP Apps are now using Redis."
