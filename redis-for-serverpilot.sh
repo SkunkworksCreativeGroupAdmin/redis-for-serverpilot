@@ -3,21 +3,26 @@ export DEBIAN_FRONTEND=noninteractive && \
 sudo apt-get update && \
 sudo apt-get -y install gcc g++ make autoconf libc-dev pkg-config redis-server && \
 \
+
 # 2. DYNAMICALLY loop through all installed PHP versions
-# This finds any directory matching /etc/php*-sp and extracts the version number
 echo "Scanning for installed PHP versions..."
-for php_dir in /etc/php*-sp; do \
-    if [ -d "$php_dir" ]; then \
+# nullglob prevents the script from breaking if no php-sp folders exist
+shopt -s nullglob 
+for php_dir in /etc/php*-sp; do
+    if [ -d "$php_dir" ]; then
         # Extracts '8.4' from '/etc/php8.4-sp'
         ver=$(basename "$php_dir" | sed 's/php//;s/-sp//')
-        echo "Processing PHP $ver..." && \
-        (yes '' | sudo pecl${ver}-sp install redis || echo "Redis already installed for $ver") && \
+        echo "Processing PHP $ver..."
+        
+        # Install via PECL. Using '|| true' ensures the script continues if already installed.
+        (yes '' | sudo pecl${ver}-sp install -q redis || true) && \
         sudo bash -c "echo extension=redis.so > /etc/php${ver}-sp/conf.d/redis.ini" && \
         sudo service php${ver}-fpm-sp restart && \
-        echo "PHP $ver Redis extension is ready."; \
-    fi \
-done && \
-\
+        echo "PHP $ver Redis extension is ready."
+    fi
+done
+shopt -u nullglob # Turn off nullglob to keep environment clean
+
 # 3. Find every WordPress App and activate Redis
 echo "Searching for WordPress apps to enable Redis..."
 for app_dir in /srv/users/serverpilot/apps/*/public; do
