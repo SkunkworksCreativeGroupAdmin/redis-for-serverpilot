@@ -3,9 +3,13 @@ export DEBIAN_FRONTEND=noninteractive && \
 sudo apt-get update && \
 sudo apt-get -y install gcc g++ make autoconf libc-dev pkg-config redis-server && \
 \
-# 2. Loop through PHP versions
-for ver in 8.4 8.3 8.2 8.1 8.0 7.4 7.3 7.2; do \
-    if [ -d "/etc/php${ver}-sp" ]; then \
+# 2. DYNAMICALLY loop through all installed PHP versions
+# This finds any directory matching /etc/php*-sp and extracts the version number
+echo "Scanning for installed PHP versions..."
+for php_dir in /etc/php*-sp; do \
+    if [ -d "$php_dir" ]; then \
+        # Extracts '8.4' from '/etc/php8.4-sp'
+        ver=$(basename "$php_dir" | sed 's/php//;s/-sp//')
         echo "Processing PHP $ver..." && \
         (yes '' | sudo pecl${ver}-sp install redis || echo "Redis already installed for $ver") && \
         sudo bash -c "echo extension=redis.so > /etc/php${ver}-sp/conf.d/redis.ini" && \
