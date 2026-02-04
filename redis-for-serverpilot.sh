@@ -29,6 +29,10 @@ for app_dir in /srv/users/serverpilot/apps/*/public; do
     if [ -f "$app_dir/wp-config.php" ]; then
         echo "Processing $app_dir..."
 
+        # SAFETY: Create a timestamped backup
+        BAK_FILE="$app_dir/wp-config.php.bak.$(date +%F_%H%M%S)"
+        cp "$app_dir/wp-config.php" "$BAK_FILE"
+
         # CLEANUP: Remove any existing exclusion lines (matches single or multi-line)
         sed -i '/WP_REDIS_IGNORED_GROUPS/,/\] );/d' "$app_dir/wp-config.php"
 
@@ -65,6 +69,19 @@ EOF
         # INJECTION: Use the 'r' (read) command in sed to pull in the file content
         # This places the contents of the file BEFORE the "Happy blogging" line
         sed -i "/\/\* That's all, stop editing! Happy blogging. \*\//e cat /tmp/redis_excludes.txt" "$app_dir/wp-config.php"
+
+        # VERIFICATION: The Safety Check
+        if ! php -l "$app_dir/wp-config.php" > /dev/null; then
+            echo "----------------------------------------------------------------"
+            echo "CRITICAL ERROR: Syntax check failed for $app_dir"
+            echo "Restoring backup from $BAK_FILE"
+            cp "$BAK_FILE" "$app_dir/wp-config.php"
+            echo "----------------------------------------------------------------"
+            continue 
+        else
+            # Only delete the backup if the syntax check passes
+            rm -f "$BAK_FILE"
+        fi
         
         # Ensure ownership is correct
         chown serverpilot:serverpilot "$app_dir/wp-config.php"
