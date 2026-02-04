@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # 1. Install System Dependencies & Redis Server
 export DEBIAN_FRONTEND=noninteractive && \
 sudo apt-get update && \
@@ -6,7 +8,6 @@ sudo apt-get -y install gcc g++ make autoconf libc-dev pkg-config redis-server &
 
 # 2. DYNAMICALLY loop through all installed PHP versions
 echo "Scanning for installed PHP versions..."
-# nullglob prevents the script from breaking if no php-sp folders exist
 shopt -s nullglob 
 for php_dir in /etc/php*-sp; do
     if [ -d "$php_dir" ]; then
@@ -21,7 +22,7 @@ for php_dir in /etc/php*-sp; do
         echo "PHP $ver Redis extension is ready."
     fi
 done
-shopt -u nullglob # Turn off nullglob to keep environment clean
+shopt -u nullglob
 
 # 3. Find every WordPress App and activate Redis
 echo "Searching for WordPress apps to enable Redis..."
@@ -33,10 +34,11 @@ for app_dir in /srv/users/serverpilot/apps/*/public; do
         BAK_FILE="$app_dir/wp-config.php.bak.$(date +%F_%H%M%S)"
         cp "$app_dir/wp-config.php" "$BAK_FILE"
 
-        # CLEANUP: Remove any existing exclusion lines (matches single or multi-line)
-        sed -i '/WP_REDIS_IGNORED_GROUPS/,/\] );/d' "$app_dir/wp-config.php"
+        # CLEANUP: Remove any existing exclusion lines (Robust match)
+        # This prevents duplicate blocks if the script is run multiple times
+        sed -i '/\/\/ Redis Object Cache Exclusions/,/\] );/d' "$app_dir/wp-config.php"
 
-        # Create the beautifully formatted/commented block in a temp file
+        # Create the formatted exclusion block in a temp file
         cat << 'EOF' > /tmp/redis_excludes.txt
 // Redis Object Cache Exclusions - Updated Feb 2026
 define( 'WP_REDIS_IGNORED_GROUPS', [
@@ -80,8 +82,8 @@ define( 'WP_REDIS_IGNORED_GROUPS', [
 ] );
 EOF
 
-        # INJECTION: Use the 'r' (read) command in sed to pull in the file content
-        # This places the contents of the file BEFORE the "Happy blogging" line
+        # INJECTION: Use the 'e cat' command to pull in the file content
+        # This places the contents BEFORE the "Happy blogging" line
         sed -i "/\/\* That's all, stop editing! Happy blogging. \*\//e cat /tmp/redis_excludes.txt" "$app_dir/wp-config.php"
 
         # VERIFICATION: The Safety Check
@@ -93,7 +95,6 @@ EOF
             echo "----------------------------------------------------------------"
             continue 
         else
-            # Only delete the backup if the syntax check passes
             rm -f "$BAK_FILE"
         fi
         
@@ -101,8 +102,22 @@ EOF
         chown serverpilot:serverpilot "$app_dir/wp-config.php"
         echo "Applied latest Redis group exclusions to wp-config.php."
 
-        # Check if plugin is already installed to save time and API pings
-        # Running as serverpilot ensures WP-CLI creates files with the right owner
+        # NEW: Create Standalone Health Check File
+        cat << 'EOF' > "$app_dir/redis-status.php"
+<?php
+header('Content-Type: text/plain');
+if (!class_exists('Redis')) { die('MISSING_EXTENSION'); }
+$redis = new Redis();
+try {
+    if (@$redis->connect('127.0.0.1', 6379, 0.5)) {
+        echo ($redis->ping() == '+PONG') ? 'ALIVE' : 'NO_PONG';
+    } else { echo 'SERVICE_DOWN'; }
+} catch (Exception $e) { echo 'CONNECTION_ERROR'; }
+EOF
+        chown serverpilot:serverpilot "$app_dir/redis-status.php"
+        echo "Created external health check at /redis-status.php"
+
+        # Plugin Installation and Activation
         if ! sudo -u serverpilot -i -- wp --path="$app_dir" plugin is-installed redis-cache; then
              echo "Installing Redis Plugin in $app_dir..."
              sudo -u serverpilot -i -- wp --path="$app_dir" plugin install redis-cache --activate
