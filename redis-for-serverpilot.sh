@@ -105,14 +105,102 @@ EOF
         # NEW: Create Standalone Health Check File
         cat << 'EOF' > "$app_dir/redis-status.php"
 <?php
-header('Content-Type: text/plain');
-if (!class_exists('Redis')) { die('MISSING_EXTENSION'); }
-$redis = new Redis();
-try {
-    if (@$redis->connect('127.0.0.1', 6379, 0.5)) {
-        echo ($redis->ping() == '+PONG') ? 'ALIVE' : 'NO_PONG';
-    } else { echo 'SERVICE_DOWN'; }
-} catch (Exception $e) { echo 'CONNECTION_ERROR'; }
+/**
+ * Redis Health Check Dashboard
+ * Provides a visual status for humans and a "PONG" string for StatusCake.
+ * Written for Skunkworks by Gemini 2.0.
+ */
+
+// --- Explicit No-Cache Headers ---
+// These headers instruct browsers and proxies not to cache this page.
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+header("Expires: Sat, 26 Jul 1997 05:00:00 GMT"); // A date in the past
+
+// --- Configuration & Domain Logic ---
+$fullHostname = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$portPos = strpos($fullHostname, ':');
+if ($portPos !== false) { $fullHostname = substr($fullHostname, 0, $portPos); }
+
+// --- Redis Connection Logic ---
+$redisStatus = 'UNKNOWN';
+$messageType = 'info';
+$statusMessage = 'Initializing check...';
+$debugInfo = '';
+
+if (!class_exists('Redis')) {
+    $redisStatus = 'MISSING_EXTENSION';
+    $messageType = 'error';
+    $statusMessage = 'The PHP Redis extension is not installed on this server.';
+} else {
+    $redis = new Redis();
+    try {
+        // 0.5s timeout to keep the page snappy
+        if (@$redis->connect('127.0.0.1', 6379, 0.5)) {
+            $ping = $redis->ping();
+            if ($ping == '+PONG' || $ping === true) {
+                $redisStatus = 'RUNNING';
+                $messageType = 'success';
+                $statusMessage = 'Redis is active and responding to commands.';
+            } else {
+                $redisStatus = 'INVALID_RESPONSE';
+                $messageType = 'warning';
+                $statusMessage = 'Redis connected but returned an unexpected response.';
+            }
+        } else {
+            $redisStatus = 'CONNECTION_FAILED';
+            $messageType = 'error';
+            $statusMessage = 'Could not connect to Redis at 127.0.0.1:6379.';
+        }
+    } catch (Exception $e) {
+        $redisStatus = 'CRITICAL_ERROR';
+        $messageType = 'error';
+        $statusMessage = 'A PHP exception occurred: ' . $e->getMessage();
+    }
+}
+
+$formattedTimestamp = date('Y-m-d H:i:s T');
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redis Status: <?php echo htmlspecialchars($fullHostname); ?></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f0f4f8; }
+        .container { max-width: 600px; margin: 4rem auto; padding: 2rem; background: #fff; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-radius: 1rem; }
+        .status-blob { font-family: monospace; padding: 1rem; border-radius: 0.5rem; background: #1a202c; color: #4fd1c5; text-align: center; font-size: 1.5rem; font-weight: bold; }
+        .message-box.success { background-color: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+        .message-box.error { background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .message-box.warning { background-color: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container">
+        <h1 class="text-2xl font-bold text-center text-gray-800 mb-2">Redis Health Check</h1>
+        <p class="text-center text-gray-500 mb-8"><?php echo htmlspecialchars($fullHostname); ?></p>
+
+        <div class="status-blob mb-6">
+            <?php echo $redisStatus; ?>
+        </div>
+
+        <div class="message-box <?php echo $messageType; ?> p-4 rounded-lg text-center mb-6">
+            <?php echo htmlspecialchars($statusMessage); ?>
+        </div>
+
+        <p class="text-xs text-center text-gray-400">
+            Last Checked: <?php echo $formattedTimestamp; ?>
+        </p>
+    </div>
+
+    <footer class="text-center text-gray-500 text-xs mt-8">
+        This status page is monitored by <a href="https://statuscake.com/" target="_blank" class="text-indigo-600 font-semibold">StatusCake</a> for any <a href="https://www.statuscake.com/kb/knowledge-base/how-does-content-match-work/" target="_blank" class="text-indigo-600 font-semibold">changes</a>.<br>
+    </footer>
+</body>
+</html>
 EOF
         chown serverpilot:serverpilot "$app_dir/redis-status.php"
         echo "Created external health check at /redis-status.php"
