@@ -40,29 +40,43 @@ for app_dir in /srv/users/serverpilot/apps/*/public; do
         cat << 'EOF' > /tmp/redis_excludes.txt
 // Redis Object Cache Exclusions - Updated Feb 2026
 define( 'WP_REDIS_IGNORED_GROUPS', [
+    // Core & Authentication: Ensuring logins and updates are real-time
     'transient',          // Core: Temporary data (MainWP syncs)
     'site-transient',     // Core: Network-wide temporary data
+    'site-options',       // Core/WPML: Site options and operational settings
     'wp_cron',            // Core: Scheduled tasks (Gravity Forms emails)
     'counts',             // Core: Comment/Post counts
     'plugins',            // Core: Active plugin list (MainWP updates)
     'themes',             // Core: Active theme list
+    'user_meta',          // Core: User authentication data
+    'users',              // Core: User authentication data
+
+    // Management & Security: Preventing bypasses and sync lags
     'action_scheduler',   // Management: Background tasks (Woo/MainWP)
     'wordfence',          // Security: Wordfence firewall/scans
     'itsec',              // Security: Solid Security settings
     'itsec_lockout',      // Security: Solid Security lockouts
+    'itsec-storage',      // Security: Solid Security Brute Force logs
     'limit-login-attempts', // Security: Brute force protection
     'userlogins',         // Security: User session logs
+
+    // Commerce & Sessions: Preventing "stuck" carts and session data
     'session',            // Commerce: User sessions (WooCommerce)
     'wc_session_queries', // Commerce: Database session lookups
     'wc_cache_keys',      // Commerce: WooCommerce internal keys
+
+    // Forms: Ensuring nonces and entries are never stale
     'wpforms',            // Forms: WPForms entries/nonces
     'formidable',         // Forms: Formidable entries/logic
     'contact-form-7',     // Forms: CF7 nonces
-    'query_monitor',      // Debug: Prevents Redis RAM bloat
-    'cloudflare',         // Infra: Cloudflare API & APO
+    'gravityforms',       // Forms: Gravity Forms nonces
+    'gf_entries',         // Forms: Gravity Forms entry data
+
+    // Infrastructure & Technical
+    'query_monitor',      // Debug: Prevents Redis RAM bloat during dev
+    'cloudflare',         // Infra: Cloudflare API & APO settings
     'wpml',               // Trans: WPML Language mapping
-    'site-options',       // Trans: WPML operational settings
-    'wp_cache_keys'       // Technical: Internal cache tracking
+    'wp_cache_keys'       // Technical: Internal Redis cache tracking
 ] );
 EOF
 
