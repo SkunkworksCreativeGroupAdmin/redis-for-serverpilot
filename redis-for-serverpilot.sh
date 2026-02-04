@@ -29,15 +29,42 @@ for app_dir in /srv/users/serverpilot/apps/*/public; do
     if [ -f "$app_dir/wp-config.php" ]; then
         echo "Processing $app_dir..."
 
-        # Define exclusions to prevent MainWP/Gravity Forms lag
-        REDIS_EXCLUDES="define( 'WP_REDIS_IGNORED_GROUPS', [ 'transient', 'site-transient', 'wp_cron', 'counts', 'wordfence', 'action_scheduler', 'query_monitor', 'itsec', 'itsec_lockout', 'session', 'wc_session_queries', 'wp_cache_keys', 'plugins' ] );"
-        
-        # CLEANUP: Remove any existing exclusion line so we don't get duplicates
-        # This allows you to update the list and re-run the script safely.
-        sed -i "/WP_REDIS_IGNORED_GROUPS/d" "$app_dir/wp-config.php"
+        # CLEANUP: Remove any existing exclusion lines (matches single or multi-line)
+        sed -i '/WP_REDIS_IGNORED_GROUPS/,/\] );/d' "$app_dir/wp-config.php"
 
-        # Inject the new constant above the happy blogging line
-        sed -i "/\/\* That's all, stop editing! Happy blogging. \*\//i $REDIS_EXCLUDES" "$app_dir/wp-config.php"
+        # Create the beautifully formatted/commented block in a temp file
+        cat << 'EOF' > /tmp/redis_excludes.txt
+// Redis Object Cache Exclusions - Updated Feb 2026
+define( 'WP_REDIS_IGNORED_GROUPS', [
+    'transient',          // Core: Temporary data (MainWP syncs)
+    'site-transient',     // Core: Network-wide temporary data
+    'wp_cron',            // Core: Scheduled tasks (Gravity Forms emails)
+    'counts',             // Core: Comment/Post counts
+    'plugins',            // Core: Active plugin list (MainWP updates)
+    'themes',             // Core: Active theme list
+    'action_scheduler',   // Management: Background tasks (Woo/MainWP)
+    'wordfence',          // Security: Wordfence firewall/scans
+    'itsec',              // Security: Solid Security settings
+    'itsec_lockout',      // Security: Solid Security lockouts
+    'limit-login-attempts', // Security: Brute force protection
+    'userlogins',         // Security: User session logs
+    'session',            // Commerce: User sessions (WooCommerce)
+    'wc_session_queries', // Commerce: Database session lookups
+    'wc_cache_keys',      // Commerce: WooCommerce internal keys
+    'wpforms',            // Forms: WPForms entries/nonces
+    'formidable',         // Forms: Formidable entries/logic
+    'contact-form-7',     // Forms: CF7 nonces
+    'query_monitor',      // Debug: Prevents Redis RAM bloat
+    'cloudflare',         // Infra: Cloudflare API & APO
+    'wpml',               // Trans: WPML Language mapping
+    'site-options',       // Trans: WPML operational settings
+    'wp_cache_keys'       // Technical: Internal cache tracking
+] );
+EOF
+
+        # INJECTION: Use the 'r' (read) command in sed to pull in the file content
+        # This places the contents of the file BEFORE the "Happy blogging" line
+        sed -i "/\/\* That's all, stop editing! Happy blogging. \*\//e cat /tmp/redis_excludes.txt" "$app_dir/wp-config.php"
         
         # Ensure ownership is correct
         chown serverpilot:serverpilot "$app_dir/wp-config.php"
